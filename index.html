@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AirOps · DTC Inbound Scoring Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#F2F5F2;color:#14140f;font-family:'IBM Plex Sans',sans-serif;font-size:15px;min-height:100vh;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.pulse{animation:pulse 2s infinite;}
+.row-hover:hover{background:#fff!important;}
+table{border-collapse:collapse;width:100%;}
+button,select{font-family:'IBM Plex Sans',sans-serif;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+const {useState} = React;
+const mono = "'IBM Plex Mono',monospace";
+const sans = "'Inter',sans-serif";
+
+const TC = {
+  P1:{bg:"#e7efe9",text:"#1b4332",border:"#bcd0c0"},
+  P2:{bg:"#f4ecdc",text:"#8b5e2a",border:"#d9c39a"},
+  P3:{bg:"#e2e8f0",text:"#1e3a5f",border:"#b6c3d4"},
+  P4:{bg:"#eceae2",text:"#6b6b66",border:"#ccc9be"},
+};
+const SC = {
+  "Demo Booked":{bg:"#e7efe9",text:"#1b4332"},
+  "Email Sent":{bg:"#e2e8f0",text:"#1e3a5f"},
+  "Email Opened":{bg:"#f4ecdc",text:"#8b5e2a"},
+  "No Response":{bg:"#f4ddda",text:"#8a2a24"},
+  "In Sequence":{bg:"#f4ecdc",text:"#8b5e2a"},
+  "In Nurture":{bg:"#eceae2",text:"#6b6b66"},
+  "Content Only":{bg:"#eceae2",text:"#6b6b66"},
+  "Upgraded":{bg:"#e7efe9",text:"#1b4332"},
+  "New":{bg:"#eceae2",text:"#6b6b66"},
+};
+const SCORE_C = s => s>=80?"#1b4332":s>=60?"#8b5e2a":s>=40?"#1e3a5f":"#6b6b66";
+
+const LEADS = [
+  {rep:"Maya Rodriguez",name:"Olipop",domain:"drinkolipop.com",vertical:"Food & Bev",tier:"P1",fit:88,timing:92,total:90,platform:"Shopify",seoTool:"Semrush",traffic:"580k",hiring:true,gap:true,inbound:"Form Fill",recency:0,spendLabel:"$10k-$50k",action:"Booking email sent — form fill 2 hours ago, AI search gap confirmed. Competitors Poppi and Liquid Death appearing in ChatGPT results.",contact:"Sarah Chen",email:"sarah@drinkolipop.com",src:"AI Search (ChatGPT)",date:"Today, 11:42 AM",signals:[{n:"form fill",v:"2 hours ago",p:15,t:"pos",cat:"first-party"},{n:"ai search gap",v:"Confirmed",p:10,t:"pos",cat:"proprietary"},{n:"seo tool",v:"Semrush",p:8,t:"pos",cat:"technographic"},{n:"organic traffic",v:"580k/mo",p:8,t:"pos",cat:"firmographic"},{n:"platform",v:"Shopify",p:8,t:"pos",cat:"firmographic"},{n:"monthly spend",v:"$10k-$50k",p:8,t:"pos",cat:"firmographic"},{n:"headcount",v:"101-200",p:6,t:"pos",cat:"firmographic"},{n:"hiring seo",v:"SEO Manager posted 14d ago",p:9,t:"pos",cat:"firmographic"}],aiGap:{queries:["best healthy soda brands","alternatives to sugary drinks"],found:["Poppi","Liquid Death","Spindrift"],missing:"Olipop"},snapshot:{Vertical:"Food & Bev",Platform:"Shopify",Traffic:"580k/mo",Headcount:"101-200","SEO Tool":"Semrush","Source":"AI Search","Employees":"101-200"},timeline:[{t:"Today 11:42 AM",e:"Form fill — AI Search"},{t:"Today 11:43 AM",e:"Scored P1"},{t:"Today 11:45 AM",e:"Booking email sent from Maya Rodriguez"}],status:"Email Sent"},
+
+  {rep:"Maya Rodriguez",name:"Necessaire",domain:"necessaire.com",vertical:"Beauty",tier:"P1",fit:92,timing:85,total:88,platform:"Shopify",seoTool:"Ahrefs",traffic:"320k",hiring:true,gap:true,inbound:"Webinar",recency:1,spendLabel:"$10k-$50k",action:"Demo booked for today 11am. Review AI search gap before call.",contact:"Remi Park",email:"remi@necessaire.com",src:"Webinar",date:"Yesterday, 2:00 PM",signals:[{n:"webinar attended",v:"AI Search Visibility Workshop",p:12,t:"pos",cat:"first-party"},{n:"ai search gap",v:"Confirmed",p:10,t:"pos",cat:"proprietary"},{n:"organic traffic",v:"320k/mo",p:8,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Ahrefs",p:8,t:"pos",cat:"technographic"},{n:"hiring content",v:"Content Lead posted 7d ago",p:9,t:"pos",cat:"firmographic"},{n:"monthly spend",v:"$10k-$50k",p:8,t:"pos",cat:"firmographic"}],aiGap:{queries:["best body care brands","luxury body wash"],found:["Aesop","Cetaphil","CeraVe"],missing:"Necessaire"},snapshot:{Vertical:"Beauty",Platform:"Shopify",Traffic:"320k/mo",Headcount:"101-200","SEO Tool":"Ahrefs","Source":"Webinar","Employees":"101-200"},timeline:[{t:"Yesterday 2:00 PM",e:"Webinar attended"},{t:"Yesterday 3:00 PM",e:"Booking email sent"},{t:"Yesterday 5:10 PM",e:"Demo booked — Today 11:00 AM"}],status:"Demo Booked"},
+
+  {rep:"James Park",name:"Graza",domain:"graza.co",vertical:"Food & Bev",tier:"P1",fit:85,timing:88,total:87,platform:"Shopify",seoTool:"Semrush",traffic:"210k",hiring:true,gap:false,inbound:"Form Fill",recency:1,spendLabel:"$5k-$10k",action:"Demo booked for today 2:30pm. Hired SEO lead last week.",contact:"Andrew Benin",email:"andrew@graza.co",src:"LinkedIn",date:"Yesterday, 9:15 AM",signals:[{n:"form fill",v:"Yesterday",p:15,t:"pos",cat:"first-party"},{n:"hiring seo",v:"SEO Lead hired 7d ago",p:9,t:"pos",cat:"firmographic"},{n:"organic traffic",v:"210k/mo",p:8,t:"pos",cat:"firmographic"},{n:"platform",v:"Shopify",p:8,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Semrush",p:8,t:"pos",cat:"technographic"}],aiGap:null,snapshot:{Vertical:"Food & Bev",Platform:"Shopify",Traffic:"210k/mo",Headcount:"1-100","SEO Tool":"Semrush","Source":"LinkedIn","Employees":"1-100"},timeline:[{t:"Yesterday 9:15 AM",e:"Form fill"},{t:"Yesterday 1:00 PM",e:"Demo booked — Today 2:30 PM"}],status:"Demo Booked"},
+
+  {rep:"James Park",name:"Aesop",domain:"aesop.com",vertical:"Beauty",tier:"P1",fit:94,timing:78,total:85,platform:"Custom",seoTool:"Ahrefs",traffic:"410k",hiring:true,gap:true,inbound:"Webinar",recency:1,spendLabel:"$50k+",action:"Booking email sent — webinar attended, hiring content lead, AI gap confirmed.",contact:"Margot Wells",email:"m.wells@aesop.com",src:"Webinar",date:"Yesterday, 10:00 AM",signals:[{n:"webinar attended",v:"AI Search Visibility Workshop",p:12,t:"pos",cat:"first-party"},{n:"ai search gap",v:"Confirmed",p:10,t:"pos",cat:"proprietary"},{n:"organic traffic",v:"410k/mo",p:8,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Ahrefs",p:8,t:"pos",cat:"technographic"},{n:"hiring content",v:"Content Lead posted 3d ago",p:9,t:"pos",cat:"firmographic"},{n:"monthly spend",v:"$50k+",p:10,t:"pos",cat:"firmographic"}],aiGap:{queries:["best luxury skincare","best facial moisturizer"],found:["Tatcha","La Mer","Drunk Elephant"],missing:"Aesop"},snapshot:{Vertical:"Beauty",Platform:"Custom",Traffic:"410k/mo",Headcount:"201-500","SEO Tool":"Ahrefs","Source":"Webinar","Employees":"201-500"},timeline:[{t:"Yesterday 10:00 AM",e:"Webinar attended"},{t:"Yesterday 10:30 AM",e:"Booking email sent"}],status:"Email Sent"},
+
+  {rep:"Maya Rodriguez",name:"Blueland",domain:"blueland.com",vertical:"Home",tier:"P1",fit:82,timing:90,total:86,platform:"Shopify",seoTool:"Semrush",traffic:"180k",hiring:false,gap:false,inbound:"Pricing Page",recency:0,spendLabel:"$10k-$50k",action:"Booking email sent — pricing page visited 4 times this week.",contact:"Kim Taylor",email:"kim@blueland.com",src:"Google",date:"Today, 8:30 AM",signals:[{n:"pricing page visits",v:"4x this week",p:14,t:"pos",cat:"first-party"},{n:"organic traffic",v:"180k/mo",p:8,t:"pos",cat:"firmographic"},{n:"platform",v:"Shopify",p:8,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Semrush",p:8,t:"pos",cat:"technographic"},{n:"monthly spend",v:"$10k-$50k",p:8,t:"pos",cat:"firmographic"}],aiGap:null,snapshot:{Vertical:"Home",Platform:"Shopify",Traffic:"180k/mo",Headcount:"101-200","SEO Tool":"Semrush","Source":"Google","Employees":"101-200"},timeline:[{t:"Today 8:30 AM",e:"Scored P1, booking email sent"}],status:"Email Sent"},
+
+  {rep:"James Park",name:"True Botanicals",domain:"truebotanicals.com",vertical:"Skincare",tier:"P1",fit:86,timing:72,total:79,platform:"Shopify",seoTool:"Ahrefs",traffic:"140k",hiring:false,gap:true,inbound:"Form Fill",recency:8,spendLabel:"$5k-$10k",action:"No reply after 8 days. Email opened. LinkedIn message recommended today.",contact:"Dana Kim",email:"dana@truebotanicals.com",src:"Referral",date:"8 days ago",signals:[{n:"ai search gap",v:"Confirmed — clean beauty",p:10,t:"pos",cat:"proprietary"},{n:"organic traffic",v:"140k/mo",p:8,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Ahrefs",p:8,t:"pos",cat:"technographic"},{n:"recency decay",v:"8 days no reply",p:-5,t:"neg",cat:"first-party"}],aiGap:{queries:["best clean beauty brands","non-toxic skincare"],found:["Ilia","RMS Beauty","Tata Harper"],missing:"True Botanicals"},snapshot:{Vertical:"Skincare",Platform:"Shopify",Traffic:"140k/mo",Headcount:"101-200","SEO Tool":"Ahrefs","Source":"Referral","Employees":"101-200"},timeline:[{t:"8 days ago",e:"Scored P1, booking email sent"},{t:"7 days ago",e:"Email opened"},{t:"Today 9:00 AM",e:"Flagged — no response, LinkedIn recommended"}],status:"No Response"},
+
+  {rep:"Maya Rodriguez",name:"Brightland",domain:"brightland.com",vertical:"Food & Bev",tier:"P1",fit:80,timing:86,total:83,platform:"Shopify",seoTool:"Semrush",traffic:"95k",hiring:true,gap:false,inbound:"Form Fill",recency:2,spendLabel:"$1k-$5k",action:"Upgraded P2 to P1 overnight. Posted SEO Manager role yesterday.",contact:"Aishwarya Iyer",email:"a.iyer@brightland.com",src:"AirOps Blog",date:"3 days ago",signals:[{n:"hiring seo",v:"SEO Manager posted yesterday",p:9,t:"pos",cat:"firmographic"},{n:"form fill",v:"3 days ago",p:10,t:"pos",cat:"first-party"},{n:"organic traffic",v:"95k/mo",p:7,t:"pos",cat:"firmographic"},{n:"platform",v:"Shopify",p:8,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Semrush",p:8,t:"pos",cat:"technographic"}],aiGap:null,snapshot:{Vertical:"Food & Bev",Platform:"Shopify",Traffic:"95k/mo",Headcount:"1-100","SEO Tool":"Semrush","Source":"Blog","Employees":"1-100"},timeline:[{t:"3 days ago",e:"Scored P2"},{t:"Yesterday",e:"Re-scored P1, booking email sent"}],status:"Upgraded"},
+
+  {rep:"James Park",name:"Caraway",domain:"carawayhome.com",vertical:"Home",tier:"P1",fit:83,timing:75,total:79,platform:"Shopify",seoTool:"Semrush",traffic:"290k",hiring:true,gap:false,inbound:"Form Fill",recency:3,spendLabel:"$10k-$50k",action:"Upgraded P2 to P1. Traffic up 35% MoM, hiring SEO analyst.",contact:"Jordan Lee",email:"j.lee@carawayhome.com",src:"Google",date:"3 days ago",signals:[{n:"traffic growth",v:"+35% MoM",p:8,t:"pos",cat:"firmographic"},{n:"hiring seo",v:"SEO Analyst posted 10d ago",p:9,t:"pos",cat:"firmographic"},{n:"organic traffic",v:"290k/mo",p:8,t:"pos",cat:"firmographic"},{n:"platform",v:"Shopify",p:8,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Semrush",p:8,t:"pos",cat:"technographic"}],aiGap:null,snapshot:{Vertical:"Home",Platform:"Shopify",Traffic:"290k/mo",Headcount:"101-200","SEO Tool":"Semrush","Source":"Google","Employees":"101-200"},timeline:[{t:"3 days ago",e:"Scored P2"},{t:"Yesterday",e:"Traffic surge, re-scored P1, booking email sent"}],status:"Upgraded"},
+
+  {rep:"Sofia Chen",name:"Curology",domain:"curology.com",vertical:"Skincare",tier:"P2",fit:85,timing:45,total:62,platform:"Custom",seoTool:"Semrush",traffic:"520k",hiring:false,gap:false,inbound:"Form Fill",recency:4,spendLabel:"$10k-$50k",action:"Strong fit, low timing. Calendly link sent. Monitor for hiring activity.",contact:"Priya Nair",email:"priya@curology.com",src:"LinkedIn",date:"4 days ago",signals:[{n:"organic traffic",v:"520k/mo",p:8,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Semrush",p:8,t:"pos",cat:"technographic"},{n:"monthly spend",v:"$10k-$50k",p:8,t:"pos",cat:"firmographic"},{n:"form fill",v:"4 days ago",p:10,t:"pos",cat:"first-party"},{n:"no hiring signals",v:"No active SEO roles",p:0,t:"neg",cat:"firmographic"}],aiGap:null,snapshot:{Vertical:"Skincare",Platform:"Custom",Traffic:"520k/mo",Headcount:"201-500","SEO Tool":"Semrush","Source":"LinkedIn","Employees":"201-500"},timeline:[{t:"4 days ago",e:"Scored P2, Calendly sent"},{t:"2 days ago",e:"Email opened"}],status:"Email Opened"},
+
+  {rep:"Tom Walsh",name:"Thrive Market",domain:"thrivemarket.com",vertical:"Grocery",tier:"P2",fit:88,timing:42,total:64,platform:"Custom",seoTool:"Ahrefs",traffic:"1.2M",hiring:false,gap:false,inbound:"Webinar",recency:5,spendLabel:"$50k+",action:"Very strong fit. No timing signals. Educational sequence enrolled.",contact:"Marcus Webb",email:"m.webb@thrivemarket.com",src:"Webinar",date:"5 days ago",signals:[{n:"webinar attended",v:"5 days ago",p:12,t:"pos",cat:"first-party"},{n:"organic traffic",v:"1.2M/mo",p:8,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Ahrefs",p:8,t:"pos",cat:"technographic"},{n:"monthly spend",v:"$50k+",p:10,t:"pos",cat:"firmographic"}],aiGap:null,snapshot:{Vertical:"Grocery",Platform:"Custom",Traffic:"1.2M/mo",Headcount:"501-1000","SEO Tool":"Ahrefs","Source":"Webinar","Employees":"501-1000"},timeline:[{t:"5 days ago",e:"Scored P2, sequence started"}],status:"In Sequence"},
+
+  {rep:"Tom Walsh",name:"Hims and Hers",domain:"forhims.com",vertical:"Health",tier:"P2",fit:82,timing:38,total:58,platform:"Custom",seoTool:"Semrush",traffic:"2.1M",hiring:true,gap:false,inbound:"Form Fill",recency:6,spendLabel:"$50k+",action:"Massive organic presence. Hiring content team. Qualify budget ownership before demo.",contact:"Alex Rios",email:"a.rios@forhims.com",src:"Google",date:"6 days ago",signals:[{n:"organic traffic",v:"2.1M/mo",p:8,t:"pos",cat:"firmographic"},{n:"hiring content",v:"Content team hiring",p:9,t:"pos",cat:"firmographic"},{n:"monthly spend",v:"$50k+",p:10,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Semrush",p:8,t:"pos",cat:"technographic"}],aiGap:null,snapshot:{Vertical:"Health",Platform:"Custom",Traffic:"2.1M/mo",Headcount:"1001-2500","SEO Tool":"Semrush","Source":"Google","Employees":"1001-2500"},timeline:[{t:"6 days ago",e:"Scored P2, Calendly sent"}],status:"In Sequence"},
+
+  {rep:"Sofia Chen",name:"Italic",domain:"italic.com",vertical:"Fashion",tier:"P2",fit:78,timing:48,total:61,platform:"Shopify",seoTool:"Semrush",traffic:"85k",hiring:true,gap:false,inbound:"Form Fill",recency:3,spendLabel:"$5k-$10k",action:"Good fit, early timing. Hiring content writer. Calendly sent.",contact:"Soo-Jin Park",email:"soojin@italic.com",src:"AirOps Blog",date:"3 days ago",signals:[{n:"hiring content",v:"Content Writer posted",p:6,t:"pos",cat:"firmographic"},{n:"organic traffic",v:"85k/mo",p:7,t:"pos",cat:"firmographic"},{n:"platform",v:"Shopify",p:8,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Semrush",p:8,t:"pos",cat:"technographic"}],aiGap:null,snapshot:{Vertical:"Fashion",Platform:"Shopify",Traffic:"85k/mo",Headcount:"1-100","SEO Tool":"Semrush","Source":"Blog","Employees":"1-100"},timeline:[{t:"3 days ago",e:"Scored P2, Calendly sent"}],status:"In Sequence"},
+
+  {rep:"Tom Walsh",name:"Parachute Home",domain:"parachutehome.com",vertical:"Home",tier:"P2",fit:80,timing:40,total:58,platform:"Shopify",seoTool:"Ahrefs",traffic:"310k",hiring:false,gap:false,inbound:"Form Fill",recency:5,spendLabel:"$10k-$50k",action:"Strong fit, no timing signals. Educational sequence enrolled.",contact:"Nina Sato",email:"n.sato@parachutehome.com",src:"Google",date:"5 days ago",signals:[{n:"organic traffic",v:"310k/mo",p:8,t:"pos",cat:"firmographic"},{n:"seo tool",v:"Ahrefs",p:8,t:"pos",cat:"technographic"},{n:"platform",v:"Shopify",p:8,t:"pos",cat:"firmographic"},{n:"monthly spend",v:"$10k-$50k",p:8,t:"pos",cat:"firmographic"}],aiGap:null,snapshot:{Vertical:"Home",Platform:"Shopify",Traffic:"310k/mo",Headcount:"201-500","SEO Tool":"Ahrefs","Source":"Google","Employees":"201-500"},timeline:[{t:"5 days ago",e:"Scored P2, Calendly sent"}],status:"In Sequence"},
+
+  {rep:"Sofia Chen",name:"Supergoop",domain:"supergoop.com",vertical:"Beauty",tier:"P3",fit:65,timing:72,total:68,platform:"Shopify",seoTool:null,traffic:"78k",hiring:true,gap:false,inbound:"Form Fill",recency:2,spendLabel:"$1k-$5k",action:"Good timing but no SEO tool detected. Calendly sent.",contact:"Jess Huang",email:"jess@supergoop.com",src:"AI Search",date:"2 days ago",signals:[{n:"hiring content",v:"Content Manager posted",p:6,t:"pos",cat:"firmographic"},{n:"organic traffic",v:"78k/mo",p:7,t:"pos",cat:"firmographic"},{n:"platform",v:"Shopify",p:8,t:"pos",cat:"firmographic"},{n:"no seo tool",v:"None detected",p:-5,t:"neg",cat:"technographic"}],aiGap:null,snapshot:{Vertical:"Beauty",Platform:"Shopify",Traffic:"78k/mo",Headcount:"101-200","SEO Tool":"None","Source":"AI Search","Employees":"101-200"},timeline:[{t:"2 days ago",e:"Scored P3, Calendly sent"}],status:"In Nurture"},
+
+  {rep:"Sofia Chen",name:"Kotn",domain:"kotn.com",vertical:"Fashion",tier:"P3",fit:60,timing:68,total:63,platform:"Shopify",seoTool:"Semrush",traffic:"45k",hiring:false,gap:true,inbound:"Form Fill",recency:10,spendLabel:"Less than $1k",action:"AI gap confirmed but low traffic and spend. Nurture with case studies.",contact:"Ben Sehl",email:"ben@kotn.com",src:"AirOps Blog",date:"10 days ago",signals:[{n:"ai search gap",v:"Confirmed",p:10,t:"pos",cat:"proprietary"},{n:"organic traffic",v:"45k/mo",p:5,t:"pos",cat:"firmographic"},{n:"platform",v:"Shopify",p:8,t:"pos",cat:"firmographic"},{n:"monthly spend",v:"Less than $1k",p:-3,t:"neg",cat:"firmographic"}],aiGap:{queries:["best ethical fashion","sustainable basics"],found:["Everlane","Reformation","Allbirds"],missing:"Kotn"},snapshot:{Vertical:"Fashion",Platform:"Shopify",Traffic:"45k/mo",Headcount:"1-100","SEO Tool":"Semrush","Source":"Blog","Employees":"1-100"},timeline:[{t:"10 days ago",e:"Scored P3, nurture enrolled"}],status:"In Nurture"},
+
+  {rep:"Tom Walsh",name:"Starface",domain:"starface.world",vertical:"Beauty",tier:"P3",fit:68,timing:42,total:54,platform:"Shopify",seoTool:null,traffic:"55k",hiring:false,gap:false,inbound:"Webinar",recency:8,spendLabel:"$1k-$5k",action:"Primarily social/influencer brand. Low SEO maturity. Educational nurture.",contact:"Julie Schott",email:"j.schott@starface.world",src:"Webinar",date:"8 days ago",signals:[{n:"webinar attended",v:"8 days ago",p:12,t:"pos",cat:"first-party"},{n:"organic traffic",v:"55k/mo",p:6,t:"pos",cat:"firmographic"},{n:"no seo tool",v:"None detected",p:-5,t:"neg",cat:"technographic"}],aiGap:null,snapshot:{Vertical:"Beauty",Platform:"Shopify",Traffic:"55k/mo",Headcount:"1-100","SEO Tool":"None","Source":"Webinar","Employees":"1-100"},timeline:[{t:"8 days ago",e:"Scored P3, nurture email sent"}],status:"In Nurture"},
+
+  {rep:"Sofia Chen",name:"Diaspora Co",domain:"diasporaco.com",vertical:"Food & Bev",tier:"P4",fit:45,timing:35,total:40,platform:"Shopify",seoTool:null,traffic:"18k",hiring:false,gap:false,inbound:"Form Fill",recency:12,spendLabel:"Less than $1k",action:"Early stage. Low traffic, no SEO tool. Monthly content email only.",contact:"Sana Javeri Kadri",email:"sana@diasporaco.com",src:"Blog",date:"12 days ago",signals:[{n:"platform",v:"Shopify",p:8,t:"pos",cat:"firmographic"},{n:"organic traffic",v:"18k/mo",p:2,t:"pos",cat:"firmographic"},{n:"no seo tool",v:"None detected",p:-5,t:"neg",cat:"technographic"},{n:"monthly spend",v:"Less than $1k",p:-3,t:"neg",cat:"firmographic"}],aiGap:null,snapshot:{Vertical:"Food & Bev",Platform:"Shopify",Traffic:"18k/mo",Headcount:"1-100","SEO Tool":"None","Source":"Blog","Employees":"1-100"},timeline:[{t:"12 days ago",e:"Scored P4, monthly content enrolled"}],status:"Content Only"},
+
+  {rep:"Sofia Chen",name:"Great Jones",domain:"greatjonesgoods.com",vertical:"Home",tier:"P4",fit:48,timing:30,total:38,platform:"Shopify",seoTool:null,traffic:"25k",hiring:false,gap:false,inbound:"Form Fill",recency:14,spendLabel:"Less than $1k",action:"Small cookware brand. No SEO investment. Monthly content email only.",contact:"Sierra Tishgart",email:"sierra@greatjonesgoods.com",src:"Social Media",date:"14 days ago",signals:[{n:"platform",v:"Shopify",p:8,t:"pos",cat:"firmographic"},{n:"organic traffic",v:"25k/mo",p:3,t:"pos",cat:"firmographic"},{n:"no seo tool",v:"None detected",p:-5,t:"neg",cat:"technographic"}],aiGap:null,snapshot:{Vertical:"Home",Platform:"Shopify",Traffic:"25k/mo",Headcount:"1-100","SEO Tool":"None","Source":"Social Media","Employees":"1-100"},timeline:[{t:"14 days ago",e:"Scored P4, monthly content enrolled"}],status:"Content Only"},
+];
+
+function TierBadge({tier,lg}) {
+  const c=TC[tier];
+  return React.createElement('span',{style:{background:c.bg,color:c.text,border:'1px solid '+c.border,borderRadius:4,fontFamily:mono,fontSize:lg?15:12,fontWeight:700,padding:lg?'5px 14px':'3px 9px',display:'inline-block'}},tier);
+}
+
+function Chip({children,type}) {
+  const m={green:{bg:'#e7efe9',text:'#1b4332'},amber:{bg:'#f4ecdc',text:'#8b5e2a'},blue:{bg:'#e2e8f0',text:'#1e3a5f'},red:{bg:'#f4ddda',text:'#8a2a24'},gray:{bg:'#eceae2',text:'#6b6b66'}};
+  const c=m[type||'gray'];
+  return React.createElement('span',{style:{background:c.bg,color:c.text,borderRadius:4,fontFamily:sans,fontSize:12,fontWeight:500,padding:'3px 9px',display:'inline-block'}},children);
+}
+
+function ScoreBar({v,grad}) {
+  return React.createElement('div',{style:{height:3,background:'#e6e3da',borderRadius:2,overflow:'hidden'}},
+    React.createElement('div',{style:{height:'100%',borderRadius:2,background:grad,width:v+'%'}}));
+}
+
+function Scorecard({lead,onClose}) {
+  const tc=TC[lead.tier];
+  const cats=[
+    {key:'firmographic',label:'FIRMOGRAPHIC',col:'#1e40af'},
+    {key:'technographic',label:'TECHNOGRAPHIC',col:'#7c3aed'},
+    {key:'first-party',label:'FIRST-PARTY',col:'#8b5e2a'},
+    {key:'proprietary',label:'PROPRIETARY',col:'#00A040'},
+  ];
+  const emailText=lead.gap?
+    'Hi '+lead.contact.split(' ')[0]+', noticed competitors are showing up in AI search for your category but '+lead.name+' is not yet. Worth a 20-min chat?':
+    lead.hiring?
+    'Hi '+lead.contact.split(' ')[0]+', saw '+lead.name+' is building out its SEO team. Great timing to see how AirOps helps '+lead.vertical+' brands win in AI search.':
+    'Hi '+lead.contact.split(' ')[0]+', thanks for reaching out. Happy to show what AI search visibility looks like for '+lead.vertical+' brands.';
+
+  return React.createElement('div',{onClick:onClose,style:{position:'fixed',inset:0,background:'rgba(20,20,15,.55)',zIndex:9999,display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'24px 16px',overflowY:'auto'}},
+    React.createElement('div',{onClick:e=>e.stopPropagation(),style:{background:'#fff',border:'1px solid #d2cfc4',borderRadius:6,width:'100%',maxWidth:860,marginBottom:40,fontFamily:sans}},
+
+      // Header
+      React.createElement('div',{style:{display:'flex',alignItems:'flex-start',justifyContent:'space-between',padding:'16px 20px',borderBottom:'1px solid #e6e3da'}},
+        React.createElement('div',{style:{display:'flex',alignItems:'center',gap:12}},
+          React.createElement('div',{style:{width:40,height:40,background:tc.bg,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',fontFamily:mono,fontSize:16,fontWeight:600,color:tc.text}},lead.name[0]),
+          React.createElement('div',null,
+            React.createElement('div',{style:{fontSize:17,fontWeight:700,color:'#14140f',marginBottom:4}},lead.name),
+            React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
+              React.createElement(TierBadge,{tier:lead.tier}),
+              React.createElement('span',{style:{fontFamily:mono,fontSize:10,color:'#6f6e66',background:'#eceae2',borderRadius:2,padding:'2px 7px'}},lead.vertical),
+              React.createElement('span',{style:{fontFamily:mono,fontSize:10,color:'#94928a'}},lead.domain)))),
+        React.createElement('button',{onClick:onClose,style:{background:'none',border:'1px solid #d2cfc4',color:'#6f6e66',width:28,height:28,borderRadius:3,cursor:'pointer',fontSize:13}},'X')),
+
+      // Score header
+      React.createElement('div',{style:{padding:'14px 20px',borderBottom:'1px solid #e6e3da',background:'#F2F5F2'}},
+        React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}},
+          React.createElement('div',null,
+            React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#94928a',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}},'Fit Score'),
+            React.createElement('div',{style:{fontFamily:mono,fontSize:30,fontWeight:600,color:'#1e40af',lineHeight:1,marginBottom:5}},lead.fit,React.createElement('span',{style:{fontSize:13,color:'#94928a'}},'/100')),
+            React.createElement(ScoreBar,{v:lead.fit,grad:'linear-gradient(90deg,#1e40af,#6ea8ff)'}),
+            React.createElement('div',{style:{fontSize:10,color:'#94928a',marginTop:4}},'Platform · Traffic · SEO Tool · Headcount')),
+          React.createElement('div',null,
+            React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#94928a',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}},'Timing Score'),
+            React.createElement('div',{style:{fontFamily:mono,fontSize:30,fontWeight:600,color:'#8b5e2a',lineHeight:1,marginBottom:5}},lead.timing,React.createElement('span',{style:{fontSize:13,color:'#94928a'}},'/100')),
+            React.createElement(ScoreBar,{v:lead.timing,grad:'linear-gradient(90deg,#8b5e2a,#d4924a)'}),
+            React.createElement('div',{style:{fontSize:10,color:'#94928a',marginTop:4}},'Inbound Action · Hiring · AI Gap · Recency')))),
+
+      // Action box
+      React.createElement('div',{style:{padding:'12px 20px',borderBottom:'1px solid #e6e3da'}},
+        React.createElement('div',{style:{background:'rgba(0,201,80,.06)',border:'1px solid rgba(0,201,80,.3)',borderRadius:4,padding:'10px 13px'}},
+          React.createElement('div',{style:{fontFamily:sans,fontSize:10,color:'#00A040',textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600,marginBottom:3}},'Recommended Action'),
+          React.createElement('div',{style:{fontSize:14,color:'#14140f',fontWeight:400,lineHeight:1.6,fontFamily:sans}},lead.action),
+          lead.tier==='P1'&&React.createElement('div',{style:{marginTop:8,padding:'8px 10px',background:'#fff',border:'1px solid #e6e3da',borderRadius:3,fontFamily:sans,fontSize:13,color:'#6f6e66',lineHeight:1.6}},
+            React.createElement('div',{style:{fontSize:9,color:'#94928a',marginBottom:3,textTransform:'uppercase',letterSpacing:'.06em'}},'Booking email · sent from assigned rep'),
+            emailText,
+            React.createElement('div',{style:{color:'#1b4332',marginTop:4}},'> Book a 20-min intro call [Calendly]')))),
+
+      // Battle map + snapshot
+      React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',borderBottom:'1px solid #e6e3da'}},
+        React.createElement('div',{style:{padding:'13px 18px',borderRight:'1px solid #e6e3da'}},
+          // Caption
+          React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}},
+            React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#94928a',textTransform:'uppercase',letterSpacing:'.08em'}},'Battle Map'),
+            React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:TC[lead.tier].text,fontWeight:600}},'FIT + TIMING · YOU SCORED '+lead.tier)),
+          // Y axis + grid
+          React.createElement('div',{style:{display:'flex',gap:4}},
+            React.createElement('div',{style:{writingMode:'vertical-rl',transform:'rotate(180deg)',fontSize:9,fontFamily:mono,color:'#94928a',letterSpacing:'.05em',display:'flex',alignItems:'center',justifyContent:'space-between',height:110,padding:'2px 0'}},
+              React.createElement('span',null,'HIGH TIMING'),React.createElement('span',null,'LOW')),
+            React.createElement('div',{style:{flex:1,display:'grid',gridTemplateColumns:'1fr 1fr',gridTemplateRows:'1fr 1fr',gap:3,minHeight:110}},
+              // P3 top-left, P1 top-right, P4 bottom-left, P2 bottom-right
+              [['P3','Nurture'],['P1','Book Demo'],['P4','Monitor'],['P2','Sequence']].map(([t,sub])=>{
+                const active=lead.tier===t;const c=TC[t];
+                return React.createElement('div',{key:t,style:{background:active?c.bg:'#eceae2',border:(active?'2px':'1px')+' solid '+(active?c.border:'#d2cfc4'),borderRadius:3,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:5,opacity:active?1:.28}},
+                  React.createElement('div',{style:{fontFamily:mono,fontSize:13,fontWeight:600,color:active?c.text:'#6b6b66'}},t),
+                  React.createElement('div',{style:{fontSize:9,textTransform:'uppercase',letterSpacing:'.04em',color:'#94928a'}},sub));
+              }))),
+          // X axis labels
+          React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginTop:3,fontFamily:mono,fontSize:9,color:'#94928a',letterSpacing:'.04em'}},
+            React.createElement('span',null,'<-- LOW FIT'),React.createElement('span',null,'HIGH FIT -->')),
+          // Score readouts
+          React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginTop:4,fontFamily:mono,fontSize:9}},
+            React.createElement('span',{style:{color:'#1e40af',fontWeight:600}},'FIT '+lead.fit+' / 100'),
+            React.createElement('span',{style:{color:'#8b5e2a',fontWeight:600}},'TIMING '+lead.timing+' / 100'))),
+
+        // Company snapshot
+        React.createElement('div',{style:{padding:'13px 18px'}},
+          React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#94928a',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:8}},'Company Snapshot'),
+          React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:5}},
+            Object.entries(lead.snapshot).map(([k,v])=>
+              React.createElement('div',{key:k,style:{background:'#F2F5F2',border:'1px solid #e6e3da',borderRadius:3,padding:'6px 8px'}},
+                React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#94928a',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:2}},k),
+                React.createElement('div',{style:{fontSize:12,color:'#14140f',fontWeight:500,fontFamily:sans}},v),
+                ['Employees','Source'].includes(k)&&React.createElement('div',{style:{fontSize:9,color:'#94928a',fontFamily:mono,marginTop:1}},'from form'))),
+            React.createElement('div',{key:'converted',style:{background:'#fff7ed',border:'1px solid #fed7aa',borderRadius:3,padding:'6px 8px'}},
+              React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#94928a',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:2}},'Converted'),
+              React.createElement('div',{style:{fontSize:12,color:'#c2410c',fontWeight:600,fontFamily:sans}},'Pending'),
+              React.createElement('div',{style:{fontSize:9,color:'#94928a',fontFamily:mono,marginTop:1}},'track outcome')),
+            React.createElement('div',{key:'days',style:{background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:3,padding:'6px 8px'}},
+              React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#94928a',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:2}},'Days Since Inbound'),
+              React.createElement('div',{style:{fontSize:12,color:'#15803d',fontWeight:600,fontFamily:mono}},lead.recency===0?'Today':lead.recency+'d'),
+              React.createElement('div',{style:{fontSize:9,color:'#94928a',fontFamily:mono,marginTop:1}},'closed loop signal')))
+          )),
+
+      // Stats Sheet - grouped by category
+      React.createElement('div',{style:{padding:'13px 20px',borderBottom:'1px solid #e6e3da'}},
+        React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#94928a',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:2}},'Stats Sheet'),
+        React.createElement('div',{style:{fontSize:12,color:'#94928a',marginBottom:10,fontFamily:sans}},'Every signal that contributed'),
+        cats.map(cat=>{
+          const cs=lead.signals.filter(s=>s.cat===cat.key);
+          if(!cs.length)return null;
+          const fired=cs.filter(s=>s.p!==0).length;
+          const sub=cs.reduce((a,s)=>a+(s.p>0?s.p:0),0);
+          return React.createElement('div',{key:cat.key,style:{marginBottom:8}},
+            React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'5px 9px',background:'#f0f0eb',borderBottom:'2px solid '+cat.col,borderRadius:'3px 3px 0 0'}},
+              React.createElement('div',{style:{display:'flex',alignItems:'center',gap:7}},
+                React.createElement('span',{style:{fontFamily:mono,fontSize:10,fontWeight:600,color:cat.col,letterSpacing:'.06em'}},cat.label),
+                React.createElement('span',{style:{fontFamily:mono,fontSize:9,color:'#94928a',padding:'1px 5px',border:'1px solid #d2cfc4',borderRadius:2}},fired+' FIRED / '+cs.length+' TOTAL')),
+              React.createElement('span',{style:{fontFamily:mono,fontSize:13,fontWeight:600,color:cat.col}},'+'+sub)),
+            cs.map((s,i)=>
+              React.createElement('div',{key:i,style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'5px 9px',background:'#F2F5F2',border:'1px solid #e6e3da',borderTop:'none',borderRadius:i===cs.length-1?'0 0 3px 3px':0}},
+                React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
+                  React.createElement('div',{style:{width:5,height:5,borderRadius:'50%',background:s.t==='pos'?'#1b4332':'#8a2a24'}}),
+                  React.createElement('span',{style:{fontFamily:sans,fontSize:12,color:'#6f6e66'}},s.n),
+                  React.createElement('span',{style:{fontSize:12,color:'#94928a',marginLeft:4,fontFamily:sans}},s.v)),
+                React.createElement('span',{style:{fontFamily:mono,fontSize:11,fontWeight:600,color:s.t==='pos'?'#1b4332':'#8a2a24'}},(s.p>0?'+':'')+s.p))));
+        })),
+
+      // AI Gap
+      lead.aiGap&&React.createElement('div',{style:{padding:'13px 20px',borderBottom:'1px solid #e6e3da'}},
+        React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#94928a',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}},'AI Search Gap Analysis'),
+        React.createElement('div',{style:{fontSize:10,color:'#94928a',marginBottom:8}},'Queries run across ChatGPT · Perplexity · Claude'),
+        lead.aiGap.queries.map((q,i)=>
+          React.createElement('div',{key:i,style:{marginBottom:8}},
+            React.createElement('div',{style:{fontFamily:mono,fontSize:11,color:'#6f6e66',padding:'3px 7px',background:'#eceae2',borderRadius:2,marginBottom:5}},'Search: "'+q+'"'),
+            React.createElement('div',{style:{display:'flex',gap:4,flexWrap:'wrap'}},
+              lead.aiGap.found.map(b=>React.createElement('span',{key:b,style:{background:'#e7efe9',color:'#1b4332',borderRadius:2,fontSize:10,fontFamily:mono,padding:'2px 6px'}},'Found: '+b)),
+              React.createElement('span',{style:{background:'#f4ddda',color:'#8a2a24',borderRadius:2,fontSize:10,fontFamily:mono,padding:'2px 6px',textDecoration:'line-through'}},'Missing: '+lead.aiGap.missing))))),
+
+      // Contact
+      React.createElement('div',{style:{padding:'11px 20px',borderBottom:'1px solid #e6e3da'}},
+        React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#94928a',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:7}},'Contact'),
+        React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},
+          React.createElement('div',null,
+            React.createElement('div',{style:{fontWeight:600,color:'#14140f'}},lead.contact),
+            React.createElement('div',{style:{fontFamily:mono,fontSize:11,color:'#94928a'}},lead.email)),
+          React.createElement('div',{style:{textAlign:'right'}},
+            React.createElement('div',{style:{fontSize:11,color:'#94928a'}},'Via: '+lead.src),
+            React.createElement('div',{style:{fontSize:11,color:'#94928a'}},lead.date),
+            React.createElement('div',{style:{fontSize:11,color:'#40916c',marginTop:2}},'Assigned: '+lead.rep)))),
+
+      // Timeline
+      React.createElement('div',{style:{padding:'11px 20px',borderBottom:'1px solid #e6e3da'}},
+        React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#94928a',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:7}},'Outreach History'),
+        lead.timeline.map((t,i)=>React.createElement('div',{key:i,style:{display:'flex',gap:10,padding:'5px 0',borderBottom:'1px solid #efede5',fontSize:11}},
+          React.createElement('span',{style:{fontFamily:mono,color:'#94928a',minWidth:110,whiteSpace:'nowrap'}},t.t),
+          React.createElement('span',{style:{color:'#6f6e66',fontFamily:sans,fontSize:12}},t.e)))),
+
+      // Actions
+      React.createElement('div',{style:{display:'flex',gap:7,padding:'11px 20px',flexWrap:'wrap',alignItems:'center'}},
+        React.createElement('button',{style:{background:lead.tier==='P1'?'#00C950':'#F2F5F2',border:'1px solid '+(lead.tier==='P1'?'#00C950':'#d2cfc4'),color:lead.tier==='P1'?'#0D2B1A':'#14140f',padding:'7px 16px',borderRadius:20,fontSize:12,fontWeight:600}},
+          lead.tier==='P1'?'Send Booking Email':'Send Calendly Link'),
+        React.createElement('button',{style:{background:(lead.tier==='P1'||lead.tier==='P2')?'#e7efe9':'#f7f7f4',border:'1px solid '+((lead.tier==='P1'||lead.tier==='P2')?'#bcd0c0':'#d2cfc4'),color:(lead.tier==='P1'||lead.tier==='P2')?'#1b4332':'#6f6e66',padding:'7px 14px',borderRadius:3,fontSize:12}},
+          (lead.tier==='P1'||lead.tier==='P2')?'Auto-pushed to Salesforce':'Push to Salesforce'),
+        React.createElement('button',{style:{background:'#F2F5F2',border:'1px solid #d2cfc4',color:'#6f6e66',padding:'7px 14px',borderRadius:3,fontSize:12}},'Send Slack Alert'),
+        React.createElement('div',{style:{flex:1}}),
+        React.createElement('select',{style:{padding:'7px 11px',background:'#F2F5F2',border:'1px solid #d2cfc4',color:'#6f6e66',borderRadius:3,fontSize:11}},
+          React.createElement('option',{value:''},'Override Tier...'),
+          React.createElement('option',{value:'P1'},'Override to P1'),
+          React.createElement('option',{value:'P2'},'Override to P2'),
+          React.createElement('option',{value:'P3'},'Override to P3'),
+          React.createElement('option',{value:'P4'},'Override to P4')))
+    ));
+}
+
+function HowItWorks() {
+  return React.createElement('div',{style:{maxWidth:700,margin:'0 auto',padding:'20px',fontFamily:sans}},
+    React.createElement('div',{style:{fontSize:20,fontWeight:700,color:'#0D2B1A',marginBottom:6}},'How the Inbound Scoring Engine Works'),
+    React.createElement('div',{style:{fontSize:15,color:'#3A3A34',lineHeight:1.7,marginBottom:24}},'Every inbound demo request is automatically enriched, scored, and routed to the right rep within minutes. Re-scores weekly. Upgrades tiers as signals change.'),
+    React.createElement('div',{style:{fontFamily:sans,fontSize:11,fontWeight:600,color:'#6b6b60',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}},'The Pipeline'),
+    React.createElement('div',{style:{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:6,marginBottom:16}},
+      [['In','Inbound','Form fill · Webinar · Page visit',false],['E','Enrichment','BuiltWith · Similarweb · LinkedIn · Claude',false],['S','Scoring','Fit + Timing → P1-P4',false],['A','Action','Booking email · Calendly · Nurture · Salesforce',false],['CL','Closed Loop','Outcomes re-weight signals weekly',true]].map(([ico,name,sub,hl])=>
+        React.createElement('div',{key:name,style:{background:hl?'rgba(27,67,50,.05)':'#fff',border:'1px solid '+(hl?'#bcd0c0':'#e6e3da'),borderRadius:4,padding:'10px 8px',textAlign:'center'}},
+          React.createElement('div',{style:{fontFamily:mono,fontSize:12,fontWeight:600,color:hl?'#1b4332':'#14140f',marginBottom:2}},ico),
+          React.createElement('div',{style:{fontFamily:sans,fontSize:12,fontWeight:600,color:hl?'#0D2B1A':'#14140f',marginBottom:2}},name),
+          React.createElement('div',{style:{fontSize:11,color:'#6b6b60',lineHeight:1.5,fontFamily:sans}},sub)))),
+    React.createElement('div',{style:{fontFamily:sans,fontSize:11,fontWeight:600,color:'#6b6b60',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:10}},'Tier Thresholds'),
+    React.createElement('div',{style:{background:'#fff',border:'1px solid #e6e3da',borderRadius:4,overflow:'hidden',marginBottom:16}},
+      React.createElement('div',{style:{display:'grid',gridTemplateColumns:'55px 1fr 1fr 110px',background:'#F2F5F2',borderBottom:'1px solid #d2cfc4'}},
+        ['Tier','Threshold','Automated Action','Salesforce'].map(h=>React.createElement('div',{key:h,style:{padding:'7px 10px',fontFamily:mono,fontSize:8,color:'#94928a',textTransform:'uppercase',letterSpacing:'.07em'}},h))),
+      [['P1','Fit >= 75 AND Timing >= 75','Personalised booking email within 15 min','Auto-pushed','#1b4332'],
+       ['P2','Fit >= 75, Timing < 75','Calendly link + 3-touch sequence','Auto-pushed','#1b4332'],
+       ['P3','Timing >= 60, Fit < 75','Calendly link + 2-touch nurture','Low priority record','#94928a'],
+       ['P4','Below P3 thresholds','Monthly content email only','No record','#94928a']].map(([tier,thresh,action,sfdc,sc])=>
+        React.createElement('div',{key:tier,style:{display:'grid',gridTemplateColumns:'55px 1fr 1fr 110px',borderBottom:'1px solid #efede5'}},
+          React.createElement('div',{style:{padding:'8px 10px'}},React.createElement(TierBadge,{tier})),
+          React.createElement('div',{style:{padding:'9px 12px',fontSize:13,color:'#2A2A24',fontFamily:sans}},thresh),
+          React.createElement('div',{style:{padding:'9px 12px',fontSize:13,color:'#2A2A24',fontFamily:sans}},action),
+          React.createElement('div',{style:{padding:'8px 10px',fontFamily:mono,fontSize:10,fontWeight:600,color:sc}},sfdc)))),
+    React.createElement('div',{style:{background:'rgba(0,201,80,.05)',border:'1px solid rgba(0,201,80,.25)',borderRadius:4,padding:'12px 14px'}},
+      React.createElement('div',{style:{fontFamily:sans,fontSize:10,color:'#00A040',textTransform:'uppercase',letterSpacing:'.06em',fontWeight:600,marginBottom:4}},'Phase 2 - Outbound Expansion'),
+      React.createElement('div',{style:{fontSize:14,color:'#2A2A24',lineHeight:1.7}},'This engine scores inbound leads only. Phase 2 extends the same model to outbound: identifying DTC brands that match the P1 profile before they ever submit a demo request. The scoring logic is identical.')));
+}
+
+function DigestDay({date,day,sec,lines}) {
+  const [open,setOpen]=useState(false);
+  return React.createElement('div',null,
+    React.createElement('div',{onClick:()=>setOpen(!open),style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 13px',border:'1px solid #e6e3da',borderRadius:4,marginBottom:8,background:'#fff',cursor:'pointer'}},
+      React.createElement('span',{style:{fontFamily:sans,fontSize:14,fontWeight:600,color:'#14140f'}},date),
+      React.createElement('span',{style:{fontFamily:sans,fontSize:12,color:'#94928a',fontWeight:400}},open?'▴ collapse':'▾ expand')),
+    open&&React.createElement('div',{style:{background:'#ffffff',border:'1px solid #D8D8D0',borderRadius:6,padding:'18px 20px',marginBottom:12}},
+      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:10}},
+        React.createElement('div',{style:{width:18,height:18,background:'#4a154b',borderRadius:3,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#fff'}},'#'),
+        React.createElement('span',{style:{fontFamily:sans,fontSize:13,color:'#555550',fontWeight:500}},'#airops-sales · 9:00 AM')),
+      React.createElement('div',{style:{fontSize:14,color:'#2A2A24',fontFamily:sans,lineHeight:2.0}},
+        'Good morning. Pipeline for ',React.createElement('strong',{style:{color:'#14140f'}},day+'.'),React.createElement('br'),React.createElement('br'),
+        React.createElement('strong',{style:{color:'#1b4332'}},sec),React.createElement('br'),
+        lines.split('\n').map(function(l,i){return React.createElement('span',{key:i},l,React.createElement('br'));}))));
+}
+
+function App() {
+  const [tab,setTab]=useState('pipeline');
+  const [filter,setFilter]=useState('all');
+  const [sel,setSel]=useState(null);
+  const counts={P1:LEADS.filter(l=>l.tier==='P1').length,P2:LEADS.filter(l=>l.tier==='P2').length,P3:LEADS.filter(l=>l.tier==='P3').length,P4:LEADS.filter(l=>l.tier==='P4').length};
+  const filtered=filter==='all'?LEADS:filter==='P3'?LEADS.filter(l=>l.tier==='P3'||l.tier==='P4'):LEADS.filter(l=>l.tier===filter);
+
+  return React.createElement('div',{style:{fontFamily:sans,fontSize:13,color:'#14140f',background:'#F2F5F2',minHeight:600}},
+
+    // Header
+    React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 24px',height:54,background:'#fff',borderBottom:'1px solid #d2cfc4'}},
+      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:12}},
+        React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6,fontFamily:sans,fontSize:13,fontWeight:700,color:'#0D2B1A',letterSpacing:'-0.02em'}},
+          React.createElement('div',{style:{width:7,height:7,background:'#00C950',borderRadius:'50%'}}),' AIROPS'),
+        React.createElement('div',{style:{fontFamily:mono,fontSize:9,color:'#6f6e66',letterSpacing:'.08em',textTransform:'uppercase',padding:'2px 8px',border:'1px solid #d2cfc4',borderRadius:2,background:'#F2F5F2'}},'DTC INBOUND SCORING ENGINE'),
+        React.createElement('div',{style:{display:'flex',alignItems:'center',gap:4,fontFamily:mono,fontSize:9,color:'#94928a'}},
+          React.createElement('div',{className:'pulse',style:{width:5,height:5,background:'#00C950',borderRadius:'50%',display:'inline-block'}}),' Enriched 4 min ago')),
+      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:16}},
+        [['Total',LEADS.length,'#14140f'],['Book Demo',counts.P1,'#1b4332'],['Sequence',counts.P2,'#8b5e2a'],['Nurture',counts.P3,'#1e3a5f'],['Monitor',counts.P4,'#6b6b66']].map(([l,v,c])=>
+          React.createElement('div',{key:l,style:{textAlign:'right'}},
+            React.createElement('div',{style:{fontFamily:mono,fontSize:20,fontWeight:700,color:c,lineHeight:1}},v),
+            React.createElement('div',{style:{fontFamily:sans,fontSize:10,color:'#888880',textTransform:'uppercase',letterSpacing:'.04em',marginTop:2,fontWeight:500}},l))))),
+
+    // Summary bar
+    React.createElement('div',{style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',background:'#d2cfc4',gap:1,borderBottom:'1px solid #d2cfc4'}},
+      [['all','All Leads',LEADS.length,'this week','#6f6e66','#e6e3da','#d2cfc4','DTC + ecommerce'],
+       ['P1','P1',counts.P1,'>= 80 pts',TC.P1.text,TC.P1.bg,TC.P1.border,'Booking email · 15 min · auto-pushed'],
+       ['P2','P2',counts.P2,'60 - 79',TC.P2.text,TC.P2.bg,TC.P2.border,'Calendly link sent · sequence'],
+       ['P3','P3 + P4',counts.P3+counts.P4,'below 60',TC.P3.text,TC.P3.bg,TC.P3.border,'Nurture · content only'],
+      ].map(([f,lbl,cnt,pill,c,pb,pbrd,sub])=>
+        React.createElement('div',{key:f,onClick:()=>{setFilter(f);setTab('pipeline');},style:{background:filter===f?'#f0f0eb':'#fff',padding:'11px 16px',cursor:'pointer',borderBottom:'2px solid '+(filter===f?'#00C950':'transparent')}},
+          React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:4}},
+            React.createElement('div',{style:{fontFamily:sans,fontSize:13,fontWeight:700,color:c}},lbl),
+            React.createElement('span',{style:{fontFamily:mono,fontSize:9,padding:'2px 6px',borderRadius:2,background:pb,color:c,border:'1px solid '+pbrd}},pill)),
+          React.createElement('div',{style:{fontFamily:mono,fontSize:26,fontWeight:700,color:f==='all'?'#0D2B1A':c,lineHeight:1,marginBottom:3}},cnt),
+          React.createElement('div',{style:{fontSize:13,color:'#555550',fontFamily:sans}},sub)))),
+
+    // Tabs
+    React.createElement('div',{style:{display:'flex',alignItems:'center',background:'#fff',borderBottom:'1px solid #d2cfc4'}},
+      [['pipeline','01','Pipeline'],['digest','02','Morning Digest'],['how','03','How It Works']].map(([id,n,lbl])=>
+        React.createElement('button',{key:id,onClick:()=>setTab(id),style:{display:'flex',alignItems:'center',gap:6,padding:'11px 20px',fontFamily:sans,fontSize:13,color:tab===id?'#0D2B1A':'#888880',fontWeight:tab===id?600:400,cursor:'pointer',border:'none',background:'none',borderBottom:'2px solid '+(tab===id?'#00C950':'transparent'),marginBottom:-1,letterSpacing:'.03em'}},
+          React.createElement('span',{style:{fontSize:8,opacity:.5}},n),' ',lbl)),
+      React.createElement('div',{style:{marginLeft:'auto',paddingRight:16,display:'flex',alignItems:'center',gap:5,fontFamily:mono,fontSize:9,color:'#94928a'}},
+        React.createElement('div',{className:'pulse',style:{width:5,height:5,background:'#00C950',borderRadius:'50%',display:'inline-block'}}),' Auto-refresh · 60s')),
+
+    // Tab content
+    React.createElement('div',{style:{display:tab==='pipeline'?'block':'none'}},
+      React.createElement('div',null,
+      React.createElement('div',{style:{display:'flex',alignItems:'center',gap:7,padding:'8px 20px',background:'#F2F5F2',borderBottom:'1px solid #e6e3da'}},
+        [['all','All'],['P1','P1'],['P2','P2'],['P3','P3'],['P4','P4']].map(([f,lbl])=>
+          React.createElement('button',{key:f,onClick:()=>setFilter(f),style:{display:'flex',alignItems:'center',gap:5,padding:'5px 13px',background:filter===f?TC[f]&&TC[f].bg||'#F2F5F2':'#fff',border:'1px solid '+(filter===f?TC[f]&&TC[f].border||'#0D2B1A':'#D8D8D0'),borderRadius:20,color:filter===f?TC[f]&&TC[f].text||'#0D2B1A':'#555550',fontSize:12,fontFamily:sans,fontWeight:filter===f?600:400,cursor:'pointer'}},
+            React.createElement('div',{style:{width:4,height:4,borderRadius:'50%',background:TC[f]&&TC[f].text||'#94928a'}}),lbl)),
+        React.createElement('div',{style:{flex:1}}),
+        React.createElement('span',{style:{fontFamily:mono,fontSize:9,color:'#94928a'}},'Live · re-scores weekly')),
+      React.createElement('div',{id:'tbl-scroll',style:{overflowX:'auto',padding:'0 20px'}},
+        React.createElement('table',{style:{width:'100%',borderCollapse:'collapse',minWidth:1100}},
+          React.createElement('thead',null,
+            React.createElement('tr',null,
+              ['Company','Vertical','Tier','Fit','Timing','SEO Tool','Organic / mo','Hiring','AI Gap','Inbound','Recency','Rep','Status'].map(h=>
+                React.createElement('th',{key:h,style:{padding:'10px 12px',textAlign:'left',fontFamily:mono,fontSize:11,fontWeight:600,color:'#94928a',letterSpacing:'.04em',textTransform:'uppercase',borderBottom:'1px solid #d2cfc4',background:'#F2F5F2',whiteSpace:'nowrap',fontFamily:sans}},h)))),
+          React.createElement('tbody',null,
+            filtered.map((l,i)=>{
+              const sc=SC[l.status]||{bg:'#eceae2',text:'#6b6b66'};
+              return React.createElement('tr',{key:l.name,className:'row-hover',onClick:()=>setSel(l),style:{borderBottom:'1px solid #E8E8E0',cursor:'pointer',background:i%2===0?'transparent':'rgba(0,0,0,.01)'}},
+                React.createElement('td',{style:{padding:'12px 12px',paddingLeft:0}},
+                  React.createElement('div',{style:{fontWeight:600,fontSize:14,color:'#0D2B1A',fontFamily:sans}},l.name),
+                  React.createElement('div',{style:{fontFamily:mono,fontSize:11,color:'#94928a',display:'block',marginTop:1}},l.domain)),
+                React.createElement('td',{style:{padding:'12px 12px'}},React.createElement(Chip,{type:'gray'},l.vertical)),
+                React.createElement('td',{style:{padding:'12px 12px'}},React.createElement(TierBadge,{tier:l.tier})),
+                ...[{v:l.fit,g:'linear-gradient(90deg,#1e40af,#6ea8ff)'},{v:l.timing,g:'linear-gradient(90deg,#8b5e2a,#d4924a)'}].map(({v,g},idx)=>
+                  React.createElement('td',{key:idx,style:{padding:'12px 12px'}},
+                    React.createElement('div',{style:{display:'flex',alignItems:'center',gap:5}},
+                      React.createElement('span',{style:{fontFamily:mono,fontSize:13,fontWeight:700,width:28,textAlign:'right',color:SCORE_C(v),display:'inline-block'}},v),
+                      React.createElement('div',{style:{width:52,height:4,background:'#d2cfc4',borderRadius:2,overflow:'hidden'}},
+                        React.createElement('div',{style:{height:'100%',borderRadius:2,background:g,width:v+'%'}}))))),
+                
+                React.createElement('td',{style:{padding:'12px 12px'}},l.seoTool?React.createElement(Chip,{type:'green'},l.seoTool):React.createElement(Chip,{type:'gray'},'None')),
+                React.createElement('td',{style:{padding:'12px 12px'}},React.createElement('span',{style:{fontFamily:mono,fontSize:12}},l.traffic)),
+                React.createElement('td',{style:{padding:'12px 12px'}},l.hiring?React.createElement(Chip,{type:'amber'},'Hiring'):React.createElement(Chip,{type:'gray'},'None')),
+                React.createElement('td',{style:{padding:'12px 12px'}},l.gap?React.createElement(Chip,{type:'red'},'Gap Found'):React.createElement(Chip,{type:'gray'},'None')),
+                React.createElement('td',{style:{padding:'12px 12px'}},React.createElement(Chip,{type:l.inbound==='Webinar'?'blue':'green'},l.inbound)),
+                React.createElement('td',{style:{padding:'12px 12px'}},React.createElement('span',{style:{fontFamily:mono,fontSize:13,color:l.recency<=1?'#00A040':l.recency<=3?'#0D2B1A':'#94928a',fontWeight:l.recency<=1?600:400}},l.recency===0?'Today':l.recency+'d ago')),
+                
+                React.createElement('td',{style:{padding:'12px 12px'}},React.createElement('span',{style:{fontFamily:sans,fontSize:13,color:'#0D2B1A',fontWeight:600}},l.rep)),
+                React.createElement('td',{style:{padding:'12px 12px'}},React.createElement('span',{style:{background:sc.bg,color:sc.text,borderRadius:4,fontFamily:sans,fontSize:12,fontWeight:600,padding:'3px 9px',display:'inline-block'}},l.status)));
+            })))),
+      React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 20px',background:'#fff',borderTop:'1px solid #e6e3da'}},
+        React.createElement('span',{style:{fontFamily:mono,fontSize:11,color:'#94928a'}},filtered.length+' lead'+(filtered.length!==1?'s':'')),
+        React.createElement('div',{style:{display:'flex',gap:14}},
+          ['P1','P2','P3','P4'].map(t=>React.createElement('span',{key:t,style:{display:'flex',alignItems:'center',gap:4,fontFamily:sans,fontSize:11,color:'#6f6e66'}},
+            React.createElement('span',{style:{width:7,height:7,borderRadius:1,background:TC[t].text,display:'inline-block'}}),
+            t+' · '+(t==='P1'?'Book demo':t==='P2'?'Sequence':t==='P3'?'Nurture':'Monitor')))),
+        React.createElement('span',{style:{fontFamily:mono,fontSize:11,color:'#94928a',letterSpacing:'.05em'}},'CLICK ROW > SCORECARD'))),
+
+    ), // end pipeline wrapper
+    React.createElement('div',{style:{display:tab==='digest'?'block':'none',maxWidth:680,margin:'0 auto',padding:'20px',fontFamily:sans}},
+      React.createElement('div',{style:{display:'flex',justifyContent:'space-between',marginBottom:14}},
+        React.createElement('div',{style:{fontFamily:sans,fontSize:12,fontWeight:600,color:'#4a4a44',textTransform:'uppercase',letterSpacing:'.04em'}},'Daily Digest Archive'),
+        React.createElement('div',{style:{fontSize:13,color:'#6b6b60'}},'Sent weekdays 9:00 AM → #airops-sales')),
+      React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'8px 12px',border:'1px solid #bcd0c0',borderRadius:4,marginBottom:8,background:'rgba(27,67,50,.04)'}},
+        React.createElement('span',{style:{fontFamily:sans,fontSize:14,fontWeight:600,color:'#0D2B1A'}},'May 23, 2026'),
+        React.createElement('span',{style:{fontFamily:sans,fontSize:12,color:'#00A040',fontWeight:500}},'Current')),
+      React.createElement('div',{style:{background:'#ffffff',border:'1px solid #D8D8D0',borderRadius:6,padding:'18px 20px',marginBottom:12}},
+        React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:10}},
+          React.createElement('div',{style:{width:18,height:18,background:'#4a154b',borderRadius:3,display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,color:'#fff'}},'#'),
+          React.createElement('span',{style:{fontFamily:sans,fontSize:13,color:'#555550',fontWeight:500}},'#airops-sales · 9:00 AM')),
+        React.createElement('div',{style:{fontSize:14,color:'#2A2A24',fontFamily:sans,lineHeight:2.0}},
+          'Good morning. Pipeline for ',React.createElement('strong',{style:{color:'#14140f'}},'Friday, May 23.'),React.createElement('br'),React.createElement('br'),
+          React.createElement('strong',{style:{color:'#1b4332'}},'DEMO CALLS TODAY (2)'),React.createElement('br'),
+          '· Necessaire — 11:00 AM · Maya Rodriguez · P1 · Beauty',React.createElement('br'),
+          '· Graza — 2:30 PM · James Park · P1 · Food & Bev',React.createElement('br'),React.createElement('br'),
+          React.createElement('strong',{style:{color:'#1b4332'}},'NEW P1s AWAITING BOOKING EMAIL (3)'),React.createElement('br'),
+          '· ',React.createElement('strong',{style:{color:'#14140f'}},'Olipop'),' — form fill 2hrs ago · AI gap confirmed → Maya Rodriguez',React.createElement('br'),
+          '· ',React.createElement('strong',{style:{color:'#14140f'}},'Aesop'),' — webinar attended · hiring content lead → James Park',React.createElement('br'),
+          '· ',React.createElement('strong',{style:{color:'#14140f'}},'Blueland'),' — pricing page x4 this week → Maya Rodriguez',React.createElement('br'),React.createElement('br'),
+          React.createElement('strong',{style:{color:'#8b5e2a'}},'NO RESPONSE AFTER 7 DAYS (1)'),React.createElement('br'),
+          '· ',React.createElement('strong',{style:{color:'#14140f'}},'True Botanicals'),' — 8 days no reply · LinkedIn follow-up today · James Park',React.createElement('br'),React.createElement('br'),
+          React.createElement('strong',{style:{color:'#14140f'}},'UPGRADED OVERNIGHT (2)'),React.createElement('br'),
+          '· Brightland P2 > P1 · SEO Manager role posted',React.createElement('br'),
+          '· Caraway P3 > P2 · traffic +35% MoM')),
+      React.createElement(DigestDay,{key:'may22',date:'May 22, 2026',day:'Thursday May 22',sec:'NEW P1s (2):',lines:'· Necessaire — webinar · 320k organic\n· Graza — form fill · hired SEO lead'}),
+      React.createElement(DigestDay,{key:'may21',date:'May 21, 2026',day:'Wednesday May 21',sec:'NEW P1s (1):',lines:'· Aesop — webinar · 410k organic · hiring content lead'})),
+
+    React.createElement('div',{style:{display:tab==='how'?'block':'none'}},
+      React.createElement(HowItWorks,null)
+    ),
+
+    // Modal
+    sel&&React.createElement(Scorecard,{lead:sel,onClose:()=>setSel(null)}),
+
+    // Scroll arrows
+    tab==='pipeline'&&React.createElement('div',{style:{position:'fixed',bottom:20,right:20,display:'flex',alignItems:'center',gap:4,background:'#fff',border:'1px solid #d2cfc4',borderRadius:4,padding:'4px 7px',boxShadow:'0 2px 6px rgba(0,0,0,.08)',zIndex:200,fontFamily:mono,fontSize:9,color:'#94928a'}},
+      React.createElement('button',{onClick:()=>{var e=document.getElementById('tbl-scroll');if(e)e.scrollLeft-=280;},style:{background:'#F2F5F2',border:'1px solid #e6e3da',borderRadius:2,width:24,height:24,cursor:'pointer',fontSize:11,color:'#6f6e66'}},'<'),
+      React.createElement('span',null,'scroll'),
+      React.createElement('button',{onClick:()=>{var e=document.getElementById('tbl-scroll');if(e)e.scrollLeft+=280;},style:{background:'#F2F5F2',border:'1px solid #e6e3da',borderRadius:2,width:24,height:24,cursor:'pointer',fontSize:11,color:'#6f6e66'}},'>'))
+  );
+}
+
+const root=ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
+</script>
+</body>
+</html>
